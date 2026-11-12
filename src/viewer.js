@@ -321,7 +321,7 @@ export function createViewer(host, { axes, onSelect, onViewChange, onAvatarReady
     avatarDirection.normalize();
     cameraRight.crossVectors(avatarDirection, up);
     avatarDirection.multiplyScalar(forward).addScaledVector(cameraRight, right).normalize();
-    const displacement = avatar.update(avatarDirection, Math.min(seconds, 0.2));
+    const displacement = avatar.update(avatarDirection, Math.min(seconds, 0.2), pressedKeys.has('ShiftLeft') || pressedKeys.has('ShiftRight'));
     if (followingAvatar) {
       camera.position.add(displacement);
       controls.target.add(displacement);
@@ -556,7 +556,8 @@ export function createViewer(host, { axes, onSelect, onViewChange, onAvatarReady
   }
 
   window.addEventListener('keydown', (event) => {
-    if (!movementKeys.has(event.code) || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
+    const sprintKey = avatarSelected && (event.code === 'ShiftLeft' || event.code === 'ShiftRight');
+    if ((!movementKeys.has(event.code) && !sprintKey) || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
     if (avatarSelected && flightVerticalKeys.has(event.code)) return;
     if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable]')) return;
     event.preventDefault();

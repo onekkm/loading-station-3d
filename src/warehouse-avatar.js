@@ -5,6 +5,7 @@ import { building } from './model.js';
 const height = 1.68;
 const radius = 0.34;
 const walkSpeed = 0.72;
+const sprintSpeed = 2.4;
 const initialPosition = [-4.6, 0, 0];
 export const avatarCameraOffset = new THREE.Vector3(-3.1, 2.15, -4.0);
 
@@ -45,6 +46,33 @@ function samplePoseClip(source, name, start, end = start) {
     return sampled.optimize();
   });
   return new THREE.AnimationClip(name, frames ? end - start : 1, tracks);
+}
+
+// Derive an in-place running gait from the bundled rig's walking cycle.
+function createSprintClip(walk) {
+  const clip = walk.clone();
+  clip.name = '数字人冲刺';
+  clip.duration /= 3.4;
+  const axis = new THREE.Vector3(1, 0, 0);
+  const lean = new THREE.Quaternion().setFromAxisAngle(axis, 0.2);
+  const pose = new THREE.Quaternion();
+  const first = new THREE.Quaternion();
+  const target = new THREE.Quaternion();
+  for (const track of clip.tracks) {
+    track.times = Float32Array.from(track.times, (time) => time / 3.4);
+    if (track.ValueTypeName !== 'quaternion') continue;
+    const limb = /(?:UpLeg|Leg|Arm|ForeArm)\.quaternion$/.test(track.name);
+    const spine = track.name.endsWith('Spine.quaternion');
+    if (!limb && !spine) continue;
+    first.fromArray(track.values);
+    for (let index = 0; index < track.values.length; index += 4) {
+      pose.fromArray(track.values, index);
+      if (limb) pose.copy(first).slerp(target.fromArray(track.values, index), 1.4);
+      if (spine) pose.multiply(lean);
+      pose.normalize().toArray(track.values, index);
+    }
+  }
+  return clip;
 }
 
 function createWalkCollision(model) {
@@ -119,9 +147,12 @@ export async function loadWarehouseAvatar(model, scene) {
   const canWalkAt = createWalkCollision(model);
   const idle = samplePoseClip(animations[0], '数字人待机', 4.75);
   const walk = samplePoseClip(animations[0], '数字人走路', 0.75, 2);
+  const sprint = createSprintClip(walk);
   const mixer = new THREE.AnimationMixer(rig);
   const standing = mixer.clipAction(idle).play();
   const gait = mixer.clipAction(walk).setEffectiveTimeScale(1.9).setEffectiveWeight(0).play();
+  const running = mixer.clipAction(sprint).setEffectiveWeight(0).play();
+  running.paused = true;
   gait.paused = true;
   mixer.update(0);
   rig.updateMatrixWorld(true);
@@ -154,11 +185,15 @@ export async function loadWarehouseAvatar(model, scene) {
   scene.add(shadow);
 
   let walkWeight = 0;
+  let runWeight = 0;
+  let speed = 0;
   const displacement = new THREE.Vector3();
-  function update(direction, seconds) {
+  function update(direction, seconds, sprinting = false) {
     const { x, z } = root.position;
+    const requestedSpeed = direction.lengthSq() ? (sprinting ? sprintSpeed : walkSpeed) : 0;
+    speed = requestedSpeed ? THREE.MathUtils.damp(speed, requestedSpeed, 7, seconds) : 0;
     if (direction.lengthSq()) {
-      const travel = walkSpeed * seconds;
+      const travel = speed * seconds;
       const steps = Math.ceil(travel / 0.065);
       const stepX = direction.x * travel / steps;
       const stepZ = direction.z * travel / steps;
@@ -177,8 +212,16 @@ export async function loadWarehouseAvatar(model, scene) {
     const nextWeight = THREE.MathUtils.clamp(walkWeight + (moving ? 1 : -1) * seconds * 7, 0, 1);
     if (moving && walkWeight === 0) gait.time = 0;
     walkWeight = nextWeight;
+    const runTarget = moving ? THREE.MathUtils.clamp((speed - walkSpeed) / (sprintSpeed - walkSpeed), 0, 1) : 0;
+    runWeight = THREE.MathUtils.damp(runWeight, runTarget, 10, seconds);
+    const cadence = THREE.MathUtils.lerp(1.9, 3.4, runWeight);
+    gait.setEffectiveTimeScale(cadence);
+    running.setEffectiveTimeScale(cadence / 3.4);
+    if (moving && running.paused) running.time = gait.time / 3.4;
+    running.paused = !walkWeight;
+    running.setEffectiveWeight(walkWeight * runWeight);
     gait.paused = !walkWeight;
-    gait.setEffectiveWeight(walkWeight);
+    gait.setEffectiveWeight(walkWeight * (1 - runWeight));
     standing.setEffectiveWeight(1 - walkWeight);
     mixer.update(seconds);
     return displacement;
@@ -186,6 +229,10 @@ export async function loadWarehouseAvatar(model, scene) {
 
   function stop() {
     walkWeight = 0;
+    runWeight = 0;
+    speed = 0;
+    running.paused = true;
+    running.setEffectiveWeight(0);
     gait.paused = true;
     gait.setEffectiveWeight(0);
     standing.setEffectiveWeight(1);
@@ -196,5 +243,5 @@ export async function loadWarehouseAvatar(model, scene) {
     selectionRing.visible = selected;
   }
 
-  return { root, clips: [idle, walk], update, stop, setSelected, get settling() { return walkWeight > 0; } };
+  return { root, clips: [idle, walk, sprint], update, stop, setSelected, get settling() { return walkWeight > 0; } };
 }

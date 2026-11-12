@@ -91,6 +91,7 @@ app.innerHTML = `
           <button type="button" data-step-key="ArrowLeft" aria-label="左移">←</button>
           <button type="button" data-step-key="ArrowDown" aria-label="后退">↓</button>
           <button type="button" data-step-key="ArrowRight" aria-label="右移">→</button>
+          <button type="button" class="sprint-button" data-step-key="ShiftLeft" aria-label="按住冲刺">冲刺</button>
         </div>
         <svg class="axis-key" viewBox="0 0 71 65" role="img" aria-label="坐标轴，X 红色，Y 绿色，Z 蓝色">
           <g class="axis-x"><line x1="35" y1="35"/><text text-anchor="middle" dominant-baseline="central">X</text></g>
@@ -278,7 +279,7 @@ function updateAvatarSelection(selected) {
   avatarControl.setAttribute('aria-pressed', String(selected));
   avatarControl.title = selected ? '取消选中数字人' : '选中数字人';
   avatarPad.hidden = !selected;
-  movementHint.textContent = selected ? 'WASD / 方向键控制数字人' : flightHint;
+  movementHint.textContent = selected ? 'WASD / 方向键移动 · 按住 Shift 冲刺' : flightHint;
   touchHint.textContent = selected ? '按住方向键走动 · 单指旋转视角' : '单指旋转 · 双指缩放和平移';
 }
 

@@ -468,3 +468,5 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   .viewport-footer .mouse-hint, .viewport-footer .select-hint { display: none; }
   .viewport-footer .touch-hint { display: inline-flex; }
 }
+
+.avatar-pad .sprint-button { grid-area: 3 / 1 / 4 / 4; width: auto; }
